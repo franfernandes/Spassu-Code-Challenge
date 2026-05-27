@@ -17,8 +17,14 @@ class DadosContato(models.Model):
 
 
 class Cliente(DadosContato):
-    pass
+    class Meta:
+        ordering = ["nome"]
+        verbose_name = "cliente"
+        verbose_name_plural = "clientes"
 
 
 class Vendedor(DadosContato):
-    pass
+    class Meta:
+        ordering = ["nome"]
+        verbose_name = "vendedor"
+        verbose_name_plural = "vendedores"

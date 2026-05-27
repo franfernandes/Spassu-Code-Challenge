@@ -43,6 +43,8 @@ class RegraComissao(models.Model):
 
     class Meta:
         ordering = ["dia_semana"]
+        verbose_name = "regra de comissao"
+        verbose_name_plural = "regras de comissao"
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(percentual_minimo__lte=models.F("percentual_maximo")),
@@ -82,6 +84,8 @@ class Venda(models.Model):
 
     class Meta:
         ordering = ["-data_hora", "numero_nota_fiscal"]
+        verbose_name = "venda"
+        verbose_name_plural = "vendas"
 
     @property
     def valor_total(self):
@@ -110,6 +114,8 @@ class ItemVenda(models.Model):
 
     class Meta:
         ordering = ["id"]
+        verbose_name = "item da venda"
+        verbose_name_plural = "itens da venda"
 
     @property
     def valor_total(self):

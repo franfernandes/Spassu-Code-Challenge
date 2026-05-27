@@ -25,6 +25,8 @@ class Produto(models.Model):
 
     class Meta:
         ordering = ["descricao"]
+        verbose_name = "produto"
+        verbose_name_plural = "produtos"
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(valor_unitario__gt=0),
