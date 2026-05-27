@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
@@ -54,6 +55,17 @@ class RegraComissao(models.Model):
             f"{self.get_dia_semana_display()}: "
             f"{self.percentual_minimo}% - {self.percentual_maximo}%"
         )
+
+    def clean(self):
+        super().clean()
+        if self.percentual_minimo > self.percentual_maximo:
+            raise ValidationError(
+                {
+                    "percentual_minimo": (
+                        "O percentual minimo nao pode ser maior que o percentual maximo."
+                    )
+                }
+            )
 
 
 class Venda(models.Model):

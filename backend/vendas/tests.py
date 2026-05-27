@@ -8,6 +8,7 @@ from pessoas.models import Cliente, Vendedor
 from produtos.models import Produto
 
 from .models import ItemVenda, RegraComissao, Venda
+from .services import calcular_comissao_item, listar_comissoes_vendedores
 
 
 class VendaModelTests(TestCase):
@@ -83,3 +84,114 @@ class RegraComissaoModelTests(TestCase):
 
         with self.assertRaises(ValidationError):
             regra.full_clean()
+
+
+class ServicoComissaoTests(TestCase):
+    def setUp(self):
+        self.cliente = Cliente.objects.create(
+            nome="Cliente Padrao",
+            email="cliente.servico@example.com",
+            telefone="11999990000",
+        )
+        self.vendedor = Vendedor.objects.create(
+            nome="Vendedor Padrao",
+            email="vendedor.servico@example.com",
+            telefone="11888880000",
+        )
+
+    def test_comissao_item_usa_percentual_do_produto_sem_regra_no_dia(self):
+        item = self.criar_item_venda(
+            valor_unitario=Decimal("100.00"),
+            percentual_produto=Decimal("4.00"),
+        )
+
+        comissao = calcular_comissao_item(item)
+
+        self.assertEqual(comissao, Decimal("4.00"))
+
+    def test_comissao_item_aplica_percentual_minimo_do_dia(self):
+        RegraComissao.objects.create(
+            dia_semana=RegraComissao.DiaSemana.SEGUNDA,
+            percentual_minimo=Decimal("3.00"),
+            percentual_maximo=Decimal("5.00"),
+        )
+        item = self.criar_item_venda(
+            valor_unitario=Decimal("100.00"),
+            percentual_produto=Decimal("2.00"),
+        )
+
+        comissao = calcular_comissao_item(item)
+
+        self.assertEqual(comissao, Decimal("3.00"))
+
+    def test_comissao_item_aplica_percentual_maximo_do_dia(self):
+        RegraComissao.objects.create(
+            dia_semana=RegraComissao.DiaSemana.SEGUNDA,
+            percentual_minimo=Decimal("3.00"),
+            percentual_maximo=Decimal("5.00"),
+        )
+        item = self.criar_item_venda(
+            valor_unitario=Decimal("100.00"),
+            percentual_produto=Decimal("10.00"),
+        )
+
+        comissao = calcular_comissao_item(item)
+
+        self.assertEqual(comissao, Decimal("5.00"))
+
+    def test_relatorio_soma_comissoes_por_vendedor_no_periodo(self):
+        outro_vendedor = Vendedor.objects.create(
+            nome="Outro Vendedor",
+            email="outro.vendedor@example.com",
+            telefone="11777770000",
+        )
+        self.criar_item_venda(
+            numero_nota_fiscal="NF-100",
+            valor_unitario=Decimal("100.00"),
+            percentual_produto=Decimal("5.00"),
+            quantidade=2,
+            vendedor=self.vendedor,
+        )
+        self.criar_item_venda(
+            numero_nota_fiscal="NF-101",
+            valor_unitario=Decimal("50.00"),
+            percentual_produto=Decimal("4.00"),
+            quantidade=1,
+            vendedor=outro_vendedor,
+        )
+
+        relatorio = listar_comissoes_vendedores(
+            data_inicio=timezone.datetime(2026, 6, 1).date(),
+            data_fim=timezone.datetime(2026, 6, 1).date(),
+        )
+
+        totais = {item.vendedor_nome: item.total_comissao for item in relatorio}
+        self.assertEqual(totais["Vendedor Padrao"], Decimal("10.00"))
+        self.assertEqual(totais["Outro Vendedor"], Decimal("2.00"))
+
+    def criar_item_venda(
+        self,
+        valor_unitario,
+        percentual_produto,
+        quantidade=1,
+        numero_nota_fiscal="NF-SERVICO",
+        vendedor=None,
+    ):
+        produto = Produto.objects.create(
+            codigo=numero_nota_fiscal,
+            descricao=f"Produto {numero_nota_fiscal}",
+            valor_unitario=valor_unitario,
+            percentual_comissao=percentual_produto,
+        )
+        venda = Venda.objects.create(
+            numero_nota_fiscal=numero_nota_fiscal,
+            data_hora=timezone.make_aware(timezone.datetime(2026, 6, 1, 10, 0)),
+            cliente=self.cliente,
+            vendedor=vendedor or self.vendedor,
+        )
+
+        return ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=quantidade,
+        )
