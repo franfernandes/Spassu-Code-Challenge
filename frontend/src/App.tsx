@@ -24,6 +24,132 @@ type ItemVendaTabela = {
   comissao: string
 }
 
+type ProdutoCatalogo = {
+  codigo: string
+  descricao: string
+  precoUnitario: number
+  percentualComissao: number
+}
+
+const produtosCatalogo: ProdutoCatalogo[] = [
+  {
+    codigo: "003",
+    descricao: "Caneta esferográfica - Preta",
+    precoUnitario: 1.5,
+    percentualComissao: 4,
+  },
+  {
+    codigo: "004",
+    descricao: "Caneta esferográfica - Azul",
+    precoUnitario: 1.5,
+    percentualComissao: 4,
+  },
+  {
+    codigo: "005",
+    descricao: "Mouse Logitech",
+    precoUnitario: 23.7,
+    percentualComissao: 10,
+  },
+  {
+    codigo: "012",
+    descricao: "Caderno 200 folhas",
+    precoUnitario: 15,
+    percentualComissao: 5,
+  },
+  {
+    codigo: "105",
+    descricao: "Manutenção Bicicleta",
+    precoUnitario: 17.4,
+    percentualComissao: 2,
+  },
+]
+
+function formatarMoeda(valor: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(valor)
+}
+
+function converterMoedaParaNumero(valor: string) {
+  return Number(valor.replace("R$", "").replace(/\./g, "").replace(",", "."))
+}
+
+function montarRotuloProduto(produto: ProdutoCatalogo) {
+  return `${produto.codigo} - ${produto.descricao}`
+}
+
+function criarItemVenda(
+  produto: ProdutoCatalogo,
+  quantidade: number,
+): ItemVendaTabela {
+  const totalProduto = produto.precoUnitario * quantidade
+  const comissao = totalProduto * (produto.percentualComissao / 100)
+
+  return {
+    codigo: produto.codigo,
+    descricao: produto.descricao,
+    quantidade,
+    precoUnitario: formatarMoeda(produto.precoUnitario),
+    totalProduto: formatarMoeda(totalProduto),
+    percentualComissao: `${produto.percentualComissao}%`,
+    comissao: formatarMoeda(comissao),
+  }
+}
+
+function extrairNome(opcaoSelecionada: string) {
+  return opcaoSelecionada.split(" - ").slice(1).join(" - ")
+}
+
+function gerarProximaNotaFiscal(vendas: VendaTabela[]) {
+  const maiorNota = Math.max(
+    ...vendas.map((venda) => Number(venda.notaFiscal)),
+    0,
+  )
+
+  return String(maiorNota + 1).padStart(8, "0")
+}
+
+function criarVendaVazia(notaFiscal: string): VendaTabela {
+  return {
+    notaFiscal,
+    cliente: "",
+    vendedor: "",
+    dataVenda: "19/10/2022 - 14:25",
+    valorTotal: formatarMoeda(0),
+    itens: [],
+  }
+}
+
+function formatarData(valor: Date) {
+  return new Intl.DateTimeFormat("pt-BR").format(valor)
+}
+
+function formatarMesAno(valor: Date) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    year: "numeric",
+  }).format(valor)
+}
+
+function gerarDiasCalendario(mesAtual: Date) {
+  const ano = mesAtual.getFullYear()
+  const mes = mesAtual.getMonth()
+  const primeiroDiaMes = new Date(ano, mes, 1)
+  const inicioCalendario = new Date(primeiroDiaMes)
+  inicioCalendario.setDate(primeiroDiaMes.getDate() - primeiroDiaMes.getDay())
+
+  return Array.from({ length: 42 }, (_, indice) => {
+    const data = new Date(inicioCalendario)
+    data.setDate(inicioCalendario.getDate() + indice)
+
+    return {
+      data,
+      foraDoMes: data.getMonth() !== mes,
+    }
+  })
+}
+
 const vendasExemplo: VendaTabela[] = [
   {
     notaFiscal: "00001005",
@@ -186,7 +312,15 @@ const vendasExemplo: VendaTabela[] = [
 function App() {
   const [paginaAtual, setPaginaAtual] = useState<PaginaAtual>("vendas")
   const [menuAberto, setMenuAberto] = useState(false)
-  const tituloPagina = paginaAtual === "vendas" ? "Vendas" : "Comissões"
+  const [vendaEmEdicao, setVendaEmEdicao] = useState<VendaTabela | null>(null)
+  const [cadastrandoVenda, setCadastrandoVenda] = useState(false)
+  const tituloPagina = cadastrandoVenda
+    ? "Nova Venda"
+    : vendaEmEdicao
+    ? `Alterar Venda - Nº ${Number(vendaEmEdicao.notaFiscal)}`
+    : paginaAtual === "vendas"
+      ? "Vendas"
+      : "Comissões"
 
   return (
     <div className="app-shell">
@@ -196,7 +330,12 @@ function App() {
             <button
               className={paginaAtual === "vendas" ? "ativo" : ""}
               type="button"
-              onClick={() => setPaginaAtual("vendas")}
+              onClick={() => {
+                setPaginaAtual("vendas")
+                setVendaEmEdicao(null)
+                setCadastrandoVenda(false)
+                setMenuAberto(false)
+              }}
             >
               <IconeVendas />
               <span>Vendas</span>
@@ -205,7 +344,12 @@ function App() {
             <button
               className={paginaAtual === "comissoes" ? "ativo" : ""}
               type="button"
-              onClick={() => setPaginaAtual("comissoes")}
+              onClick={() => {
+                setPaginaAtual("comissoes")
+                setVendaEmEdicao(null)
+                setCadastrandoVenda(false)
+                setMenuAberto(false)
+              }}
             >
               <IconeComissoes />
               <span>Comissões</span>
@@ -233,7 +377,15 @@ function App() {
         </header>
 
         {paginaAtual === "vendas" ? (
-          <PaginaVendas vendas={vendasExemplo} />
+          <PaginaVendas
+            vendas={vendasExemplo}
+            cadastrandoVenda={cadastrandoVenda}
+            vendaEmEdicao={vendaEmEdicao}
+            onCadastrarVenda={() => setCadastrandoVenda(true)}
+            onEditarVenda={setVendaEmEdicao}
+            onFecharCadastro={() => setCadastrandoVenda(false)}
+            onFecharEdicao={() => setVendaEmEdicao(null)}
+          />
         ) : (
           <PaginaComissoes />
         )}
@@ -242,13 +394,31 @@ function App() {
   )
 }
 
-function PaginaVendas({ vendas }: { vendas: VendaTabela[] }) {
+function PaginaVendas({
+  vendas,
+  cadastrandoVenda,
+  vendaEmEdicao,
+  onCadastrarVenda,
+  onEditarVenda,
+  onFecharCadastro,
+  onFecharEdicao,
+}: {
+  vendas: VendaTabela[]
+  cadastrandoVenda: boolean
+  vendaEmEdicao: VendaTabela | null
+  onCadastrarVenda: () => void
+  onEditarVenda: (venda: VendaTabela) => void
+  onFecharCadastro: () => void
+  onFecharEdicao: () => void
+}) {
   const [listaVendas, setListaVendas] = useState(vendas)
   const [notaFiscalAberta, setNotaFiscalAberta] = useState<string | null>(null)
   const [vendaParaRemover, setVendaParaRemover] = useState<VendaTabela | null>(
     null,
   )
   const [mostrarAlertaRemocao, setMostrarAlertaRemocao] = useState(false)
+  const [mostrarAlertaAlteracao, setMostrarAlertaAlteracao] = useState(false)
+  const [mostrarAlertaCadastro, setMostrarAlertaCadastro] = useState(false)
 
   function alternarItens(notaFiscal: string) {
     setNotaFiscalAberta((notaAtual) =>
@@ -270,12 +440,58 @@ function PaginaVendas({ vendas }: { vendas: VendaTabela[] }) {
     setMostrarAlertaRemocao(true)
   }
 
+  function finalizarEdicao(vendaAtualizada: VendaTabela) {
+    setListaVendas((vendasAtuais) =>
+      vendasAtuais.map((venda) =>
+        venda.notaFiscal === vendaAtualizada.notaFiscal
+          ? vendaAtualizada
+          : venda,
+      ),
+    )
+    setNotaFiscalAberta(null)
+    setMostrarAlertaAlteracao(true)
+    onFecharEdicao()
+  }
+
+  function finalizarCadastro(novaVenda: VendaTabela) {
+    setListaVendas((vendasAtuais) => [novaVenda, ...vendasAtuais])
+    setNotaFiscalAberta(null)
+    setMostrarAlertaCadastro(true)
+    onFecharCadastro()
+  }
+
+  if (cadastrandoVenda) {
+    return (
+      <TelaFormularioVenda
+        modo="criar"
+        venda={criarVendaVazia(gerarProximaNotaFiscal(listaVendas))}
+        onCancelar={onFecharCadastro}
+        onFinalizar={finalizarCadastro}
+      />
+    )
+  }
+
+  if (vendaEmEdicao) {
+    return (
+      <TelaFormularioVenda
+        modo="editar"
+        venda={vendaEmEdicao}
+        onCancelar={onFecharEdicao}
+        onFinalizar={finalizarEdicao}
+      />
+    )
+  }
+
   return (
     <>
       <section className="cartao-conteudo">
         <div className="cabecalho-lista">
           <h2>Vendas Realizadas</h2>
-          <button className="botao-primario" type="button">
+          <button
+            className="botao-primario"
+            type="button"
+            onClick={onCadastrarVenda}
+          >
             Inserir nova Venda
           </button>
         </div>
@@ -311,6 +527,7 @@ function PaginaVendas({ vendas }: { vendas: VendaTabela[] }) {
                             alternarItens(venda.notaFiscal)
                           }
                           onRemover={() => setVendaParaRemover(venda)}
+                          onEditar={() => onEditarVenda(venda)}
                         />
                       </td>
                     </tr>
@@ -342,6 +559,18 @@ function PaginaVendas({ vendas }: { vendas: VendaTabela[] }) {
       {mostrarAlertaRemocao && (
         <AlertaVendaRemovida onFechar={() => setMostrarAlertaRemocao(false)} />
       )}
+
+      {mostrarAlertaAlteracao && (
+        <AlertaVendaAlterada
+          onFechar={() => setMostrarAlertaAlteracao(false)}
+        />
+      )}
+
+      {mostrarAlertaCadastro && (
+        <AlertaVendaCadastrada
+          onFechar={() => setMostrarAlertaCadastro(false)}
+        />
+      )}
     </>
   )
 }
@@ -350,17 +579,19 @@ function AcoesVenda({
   estaAberta,
   onAlternarItens,
   onRemover,
+  onEditar,
 }: {
   estaAberta: boolean
   onAlternarItens: () => void
   onRemover: () => void
+  onEditar: () => void
 }) {
   return (
     <div className="acoes-venda">
       <button type="button" onClick={onAlternarItens}>
         {estaAberta ? "Fechar" : "Ver itens"}
       </button>
-      <button type="button" aria-label="Editar venda">
+      <button type="button" aria-label="Editar venda" onClick={onEditar}>
         <IconeEditar />
       </button>
       <button
@@ -423,6 +654,28 @@ function AlertaVendaRemovida({ onFechar }: { onFechar: () => void }) {
   )
 }
 
+function AlertaVendaAlterada({ onFechar }: { onFechar: () => void }) {
+  return (
+    <aside className="alerta-venda-removida" role="status">
+      <strong>VENDA ALTERADA COM SUCESSO!</strong>
+      <button type="button" aria-label="Fechar alerta" onClick={onFechar}>
+        <IconeFecharAlerta />
+      </button>
+    </aside>
+  )
+}
+
+function AlertaVendaCadastrada({ onFechar }: { onFechar: () => void }) {
+  return (
+    <aside className="alerta-venda-removida" role="status">
+      <strong>VENDA REALIZADA COM SUCESSO!</strong>
+      <button type="button" aria-label="Fechar alerta" onClick={onFechar}>
+        <IconeFecharAlerta />
+      </button>
+    </aside>
+  )
+}
+
 function TabelaItensVenda({ venda }: { venda: VendaTabela }) {
   const quantidadeTotal = venda.itens.reduce(
     (total, item) => total + item.quantidade,
@@ -477,30 +730,488 @@ function TabelaItensVenda({ venda }: { venda: VendaTabela }) {
   )
 }
 
-function PaginaComissoes() {
+function TelaFormularioVenda({
+  modo,
+  venda,
+  onCancelar,
+  onFinalizar,
+}: {
+  modo: "editar" | "criar"
+  venda: VendaTabela
+  onCancelar: () => void
+  onFinalizar: (vendaAtualizada: VendaTabela) => void
+}) {
+  const opcoesVendedores = [
+    "001 - Regina Souza",
+    "002 - Cléber Toledo",
+    "003 - Jacira dos Santos",
+  ]
+  const opcoesClientes = [
+    "025 - Jorge Lacerda dos Santos",
+    "026 - Francisco Severino Ferreira",
+    "027 - Vanessa Elza Liz Freitas",
+  ]
+  const [buscaProduto, setBuscaProduto] = useState("")
+  const [quantidadeProduto, setQuantidadeProduto] = useState("0")
+  const [produtoSelecionado, setProdutoSelecionado] =
+    useState<ProdutoCatalogo | null>(null)
+  const [dataVenda, setDataVenda] = useState(venda.dataVenda)
+  const [vendedorSelecionado, setVendedorSelecionado] = useState(() =>
+    modo === "criar"
+      ? ""
+      : opcoesVendedores.find(
+          (opcao) => extrairNome(opcao) === venda.vendedor,
+        ) ?? opcoesVendedores[0],
+  )
+  const [clienteSelecionado, setClienteSelecionado] = useState(() =>
+    modo === "criar"
+      ? ""
+      : opcoesClientes.find((opcao) => extrairNome(opcao) === venda.cliente) ??
+        opcoesClientes[0],
+  )
+  const [itensEditaveis, setItensEditaveis] = useState(() =>
+    modo === "criar"
+      ? venda.itens
+      : venda.itens.filter((item) => item.codigo !== "005"),
+  )
+  const textoBuscaNormalizado = buscaProduto.trim().toLowerCase()
+  const sugestoesFiltradas = produtosCatalogo.filter((produto) =>
+    montarRotuloProduto(produto).toLowerCase().includes(textoBuscaNormalizado),
+  )
+  const exibirSugestoes = buscaProduto.trim().length > 0
+    && !produtoSelecionado
+  const valorTotalEdicao = formatarMoeda(
+    itensEditaveis.reduce(
+      (total, item) => total + converterMoedaParaNumero(item.totalProduto),
+      0,
+    ),
+  )
+  const formularioValido =
+    dataVenda.trim().length > 0 &&
+    vendedorSelecionado.length > 0 &&
+    clienteSelecionado.length > 0 &&
+    itensEditaveis.length > 0
+
+  function adicionarProduto() {
+    const quantidade = Number(quantidadeProduto)
+    const produto =
+      produtoSelecionado ??
+      produtosCatalogo.find(
+        (item) =>
+          montarRotuloProduto(item).toLowerCase() === textoBuscaNormalizado ||
+          item.codigo === textoBuscaNormalizado,
+      ) ??
+      sugestoesFiltradas[0]
+
+    if (!produto || quantidade <= 0) {
+      return
+    }
+
+    setItensEditaveis((itensAtuais) => {
+      const itemExistente = itensAtuais.find(
+        (item) => item.codigo === produto.codigo,
+      )
+
+      if (!itemExistente) {
+        return [...itensAtuais, criarItemVenda(produto, quantidade)]
+      }
+
+      return itensAtuais.map((item) =>
+        item.codigo === produto.codigo
+          ? criarItemVenda(produto, item.quantidade + quantidade)
+          : item,
+      )
+    })
+    setBuscaProduto("")
+    setProdutoSelecionado(null)
+    setQuantidadeProduto("0")
+  }
+
+  function removerProduto(codigo: string) {
+    setItensEditaveis((itensAtuais) =>
+      itensAtuais.filter((item) => item.codigo !== codigo),
+    )
+  }
+
+  function finalizarVenda() {
+    if (!formularioValido) {
+      return
+    }
+
+    onFinalizar({
+      ...venda,
+      cliente: extrairNome(clienteSelecionado),
+      vendedor: extrairNome(vendedorSelecionado),
+      dataVenda,
+      itens: itensEditaveis,
+      valorTotal: valorTotalEdicao,
+    })
+  }
+
   return (
-    <section className="cartao-conteudo">
-      <div className="cabecalho-lista">
-        <h2>Comissões</h2>
+    <section className="cartao-conteudo tela-alterar-venda">
+      <div className="alterar-venda-produtos">
+        <h2>Produtos</h2>
+
+        <div className="formulario-produto">
+          <label className="campo-busca-produto">
+            <span>Buscar pelo código de barras ou descrição</span>
+            <input
+              type="text"
+              placeholder="Digite o código ou nome do produto"
+              value={buscaProduto}
+              onChange={(event) => {
+                setBuscaProduto(event.target.value)
+                setProdutoSelecionado(null)
+              }}
+            />
+            {exibirSugestoes && (
+              <ul className="sugestoes-produtos">
+                {sugestoesFiltradas.map((produto) => (
+                  <li key={produto.codigo}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBuscaProduto(montarRotuloProduto(produto))
+                        setProdutoSelecionado(produto)
+                      }}
+                    >
+                      {montarRotuloProduto(produto)}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </label>
+
+          <label className="campo-quantidade-produto">
+            <span>Quantidade de itens</span>
+            <input
+              type="number"
+              min="0"
+              value={quantidadeProduto}
+              onChange={(event) => setQuantidadeProduto(event.target.value)}
+            />
+          </label>
+
+          <button
+            className="botao-primario botao-adicionar-produto"
+            type="button"
+            onClick={adicionarProduto}
+          >
+            Adicionar
+          </button>
+        </div>
+
+        <table className="tabela-produtos-edicao">
+          <thead>
+            <tr>
+              <th>Produtos/Serviço</th>
+              <th>Quantidade</th>
+              <th>Preço unitário</th>
+              <th>Total</th>
+              <th aria-label="Ações" />
+            </tr>
+          </thead>
+          <tbody>
+            {itensEditaveis.map((item) => (
+              <tr key={item.codigo}>
+                <td>
+                  {item.codigo} - {item.descricao}
+                </td>
+                <td>{item.quantidade}</td>
+                <td>{item.precoUnitario}</td>
+                <td>{item.totalProduto}</td>
+                <td>
+                  <button
+                    type="button"
+                    aria-label="Remover produto"
+                    onClick={() => removerProduto(item.codigo)}
+                  >
+                    <IconeExcluir />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      <div className="filtros-comissoes">
-        <label>
-          Data inicial
-          <input type="date" />
-        </label>
-        <label>
-          Data final
-          <input type="date" />
-        </label>
-        <button className="botao-primario" type="button">
-          Consultar
-        </button>
+      <aside className="alterar-venda-dados">
+        <h2>Dados da venda</h2>
+
+        <form className="formulario-dados-venda">
+          <label>
+            <span>Data e Hora da Venda</span>
+            <input
+              type="text"
+              value={dataVenda}
+              onChange={(event) => setDataVenda(event.target.value)}
+            />
+          </label>
+
+          <label>
+            <span>Escolha um vendedor</span>
+            <select
+              value={vendedorSelecionado}
+              onChange={(event) => setVendedorSelecionado(event.target.value)}
+            >
+              <option value="" disabled>
+                Selecione o nome
+              </option>
+              {opcoesVendedores.map((opcao) => (
+                <option key={opcao}>{opcao}</option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <span>Escolha um cliente</span>
+            <select
+              value={clienteSelecionado}
+              onChange={(event) => setClienteSelecionado(event.target.value)}
+            >
+              <option value="" disabled>
+                Selecione o nome
+              </option>
+              {opcoesClientes.map((opcao) => (
+                <option key={opcao}>{opcao}</option>
+              ))}
+            </select>
+          </label>
+        </form>
+
+        <div className="rodape-dados-venda">
+          <div className="total-edicao-venda">
+            <strong>
+              {modo === "criar"
+                ? "Valor total da venda:"
+                : "Valor total da venda"}
+            </strong>
+            <span>{valorTotalEdicao}</span>
+          </div>
+
+          <div className="acoes-edicao-venda">
+            <button type="button" onClick={onCancelar}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={finalizarVenda}
+              disabled={!formularioValido}
+            >
+              Finalizar
+            </button>
+          </div>
+        </div>
+      </aside>
+    </section>
+  )
+}
+
+function PaginaComissoes() {
+  const [periodoInicio, setPeriodoInicio] = useState("")
+  const [periodoFim, setPeriodoFim] = useState("")
+  const [campoCalendarioAberto, setCampoCalendarioAberto] = useState<
+    "inicio" | "fim" | null
+  >(null)
+  const [mesCalendario, setMesCalendario] = useState(
+    () => {
+      const hoje = new Date()
+
+      return new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+    },
+  )
+  const [relatorioVisivel, setRelatorioVisivel] = useState(false)
+  const diasCalendario = gerarDiasCalendario(mesCalendario)
+  const relatorioComissoes = [
+    {
+      codigo: "001",
+      vendedor: "Regina Souza",
+      totalVendas: 25,
+      totalComissoes: "R$ 1.245,25",
+    },
+    {
+      codigo: "002",
+      vendedor: "Cléber Toledo",
+      totalVendas: 23,
+      totalComissoes: "R$ 1.025,32",
+    },
+    {
+      codigo: "003",
+      vendedor: "Jacira dos Santos",
+      totalVendas: 31,
+      totalComissoes: "R$ 1.852,25",
+    },
+  ]
+
+  function navegarMes(direcao: -1 | 1) {
+    setMesCalendario(
+      (mesAtual) =>
+        new Date(mesAtual.getFullYear(), mesAtual.getMonth() + direcao, 1),
+    )
+  }
+
+  function selecionarData(data: Date) {
+    const dataSelecionada = formatarData(data)
+
+    if (campoCalendarioAberto === "inicio") {
+      setPeriodoInicio(dataSelecionada)
+    }
+
+    if (campoCalendarioAberto === "fim") {
+      setPeriodoFim(dataSelecionada)
+    }
+
+    setCampoCalendarioAberto(null)
+  }
+
+  function pesquisarComissoes() {
+    if (!periodoInicio || !periodoFim) {
+      return
+    }
+
+    setRelatorioVisivel(true)
+  }
+
+  return (
+    <section className="cartao-conteudo cartao-comissoes">
+      <div className="cabecalho-comissoes">
+        <h2>Relatório de Comissões</h2>
+
+        <div className="filtros-comissoes">
+          <label>
+            <span className="sr-only">Período de Início</span>
+            <input
+              type="text"
+              placeholder="Período de Início"
+              value={periodoInicio}
+              onChange={(event) => setPeriodoInicio(event.target.value)}
+              onFocus={() => setCampoCalendarioAberto("inicio")}
+            />
+            <button
+              className="botao-calendario"
+              type="button"
+              aria-label="Abrir calendário de início"
+              onClick={() => setCampoCalendarioAberto("inicio")}
+            >
+              <IconeCalendario />
+            </button>
+          </label>
+
+          <label>
+            <span className="sr-only">Período de Fim</span>
+            <input
+              type="text"
+              placeholder="Período de Fim"
+              value={periodoFim}
+              onChange={(event) => setPeriodoFim(event.target.value)}
+              onFocus={() => setCampoCalendarioAberto("fim")}
+            />
+            <button
+              className="botao-calendario"
+              type="button"
+              aria-label="Abrir calendário de fim"
+              onClick={() => setCampoCalendarioAberto("fim")}
+            >
+              <IconeCalendario />
+            </button>
+          </label>
+
+          <button
+            className="botao-pesquisar-comissoes"
+            type="button"
+            aria-label="Pesquisar comissões"
+            onClick={pesquisarComissoes}
+          >
+            <IconeLupa />
+          </button>
+        </div>
       </div>
 
-      <p className="estado-vazio">
-        Informe uma faixa de datas para consultar as comissões.
-      </p>
+      {campoCalendarioAberto && (
+        <div className="calendario-comissoes">
+          <div className="calendario-cabecalho">
+            <button
+              className="calendario-mes-anterior"
+              type="button"
+              aria-label="Mês anterior"
+              onClick={() => navegarMes(-1)}
+            />
+            <strong>{formatarMesAno(mesCalendario)}</strong>
+            <button
+              className="calendario-proximo-mes"
+              type="button"
+              aria-label="Próximo mês"
+              onClick={() => navegarMes(1)}
+            />
+          </div>
+          <div className="calendario-semana">
+            <span>do</span>
+            <span>2ª</span>
+            <span>3ª</span>
+            <span>4ª</span>
+            <span>5ª</span>
+            <span>6ª</span>
+            <span>sá</span>
+          </div>
+          <div className="calendario-dias">
+            {diasCalendario.map((diaCalendario) => (
+              <button
+                className={[
+                  diaCalendario.foraDoMes ? "fora-do-mes" : "",
+                  formatarData(diaCalendario.data) === periodoInicio ||
+                  formatarData(diaCalendario.data) === periodoFim
+                    ? "selecionado"
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                type="button"
+                key={diaCalendario.data.toISOString()}
+                onClick={() => selecionarData(diaCalendario.data)}
+              >
+                {diaCalendario.data.getDate()}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {relatorioVisivel ? (
+        <div className="tabela-comissoes-scroll">
+          <table className="tabela-comissoes">
+            <thead>
+              <tr>
+                <th>Cód.</th>
+                <th>Vendedor</th>
+                <th>Total de Vendas</th>
+                <th>Total de Comissões</th>
+              </tr>
+            </thead>
+            <tbody>
+              {relatorioComissoes.map((linha) => (
+                <tr key={linha.codigo}>
+                  <td>{linha.codigo}</td>
+                  <td>{linha.vendedor}</td>
+                  <td>{linha.totalVendas}</td>
+                  <td>{linha.totalComissoes}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={3}>Total de Comissões do Período</td>
+                <td>R$ 4.122,82</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      ) : (
+        <p className="estado-vazio">
+          Para visualizar o relatório, selecione um período nos campos acima.
+        </p>
+      )}
     </section>
   )
 }
@@ -513,6 +1224,35 @@ function IconeHamburguer() {
         stroke="currentColor"
         strokeWidth="3"
       />
+    </svg>
+  )
+}
+
+function IconeCalendario() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M5 18.5V10H19V18.5C19 19.3438 18.3125 20 17.5 20H6.5C5.65625 20 5 19.3438 5 18.5ZM15 12.375V13.625C15 13.8438 15.1562 14 15.375 14H16.625C16.8125 14 17 13.8438 17 13.625V12.375C17 12.1875 16.8125 12 16.625 12H15.375C15.1562 12 15 12.1875 15 12.375ZM15 16.375V17.625C15 17.8438 15.1562 18 15.375 18H16.625C16.8125 18 17 17.8438 17 17.625V16.375C17 16.1875 16.8125 16 16.625 16H15.375C15.1562 16 15 16.1875 15 16.375ZM11 12.375V13.625C11 13.8438 11.1562 14 11.375 14H12.625C12.8125 14 13 13.8438 13 13.625V12.375C13 12.1875 12.8125 12 12.625 12H11.375C11.1562 12 11 12.1875 11 12.375ZM11 16.375V17.625C11 17.8438 11.1562 18 11.375 18H12.625C12.8125 18 13 17.8438 13 17.625V16.375C13 16.1875 12.8125 16 12.625 16H11.375C11.1562 16 11 16.1875 11 16.375ZM7 12.375V13.625C7 13.8438 7.15625 14 7.375 14H8.625C8.8125 14 9 13.8438 9 13.625V12.375C9 12.1875 8.8125 12 8.625 12H7.375C7.15625 12 7 12.1875 7 12.375ZM7 16.375V17.625C7 17.8438 7.15625 18 7.375 18H8.625C8.8125 18 9 17.8438 9 17.625V16.375C9 16.1875 8.8125 16 8.625 16H7.375C7.15625 16 7 16.1875 7 16.375ZM17.5 6C18.3125 6 19 6.6875 19 7.5V9H5V7.5C5 6.6875 5.65625 6 6.5 6H8V4.5C8 4.25 8.21875 4 8.5 4H9.5C9.75 4 10 4.25 10 4.5V6H14V4.5C14 4.25 14.2188 4 14.5 4H15.5C15.75 4 16 4.25 16 4.5V6H17.5Z"
+        fill="#00585E"
+      />
+    </svg>
+  )
+}
+
+function IconeLupa() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <g clipPath="url(#clip-lupa-comissoes)">
+        <path
+          d="M15.7812 13.8438C16.0625 14.1562 16.0625 14.625 15.75 14.9062L14.875 15.7812C14.5938 16.0938 14.125 16.0938 13.8125 15.7812L10.7188 12.6875C10.5625 12.5312 10.5 12.3438 10.5 12.1562V11.625C9.375 12.5 8 13 6.5 13C2.90625 13 0 10.0938 0 6.5C0 2.9375 2.90625 0 6.5 0C10.0625 0 13 2.9375 13 6.5C13 8.03125 12.4688 9.40625 11.625 10.5H12.125C12.3125 10.5 12.5 10.5938 12.6562 10.7188L15.7812 13.8438ZM6.5 10.5C8.6875 10.5 10.5 8.71875 10.5 6.5C10.5 4.3125 8.6875 2.5 6.5 2.5C4.28125 2.5 2.5 4.3125 2.5 6.5C2.5 8.71875 4.28125 10.5 6.5 10.5Z"
+          fill="white"
+        />
+      </g>
+      <defs>
+        <clipPath id="clip-lupa-comissoes">
+          <rect width="16" height="16" fill="white" />
+        </clipPath>
+      </defs>
     </svg>
   )
 }
