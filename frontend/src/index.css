@@ -1,26 +1,15 @@
 :root {
-  --color-primary: #2f7d52;
-  --color-primary-dark: #23623f;
-  --color-primary-light: #e8f5ee;
-  --color-danger: #b42318;
-  --color-danger-light: #fee4e2;
-  --color-success: #027a48;
-  --color-success-light: #dcfae6;
-  --color-warning: #b54708;
-  --color-warning-light: #fef0c7;
-  --color-text: #1f2937;
-  --color-text-muted: #667085;
-  --color-border: #e5e7eb;
-  --color-bg: #f7f8fa;
-  --color-white: #ffffff;
-  --radius: 10px;
-  --shadow: 0 8px 24px rgba(31, 41, 55, 0.08);
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  --color-primary: #00585e;
+  --color-sidebar-text: #2b7d83;
+  --color-total: #003538;
+  --color-danger: #be0000;
+  --color-bg: #ffffff;
+  --color-surface: #f0f0f0;
+  --color-sidebar-bg: #f2f2f2;
+  --shadow-sidebar: 0 4px 4px rgba(0, 0, 0, 0.25);
+  font-family: Roboto, Arial, sans-serif;
   font-synthesis: none;
-  line-height: 1.5;
-  color: var(--color-text);
+  color: #000000;
   background: var(--color-bg);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -34,6 +23,7 @@
 body {
   margin: 0;
   min-width: 320px;
+  overflow-x: hidden;
   background: var(--color-bg);
 }
 
