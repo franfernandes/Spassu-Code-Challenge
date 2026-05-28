@@ -14,6 +14,7 @@ PRECISAO_MONETARIA = Decimal("0.01")
 class ComissaoVendedor:
     vendedor_id: int
     vendedor_nome: str
+    total_vendas: int
     total_comissao: Decimal
 
 
@@ -53,9 +54,11 @@ def listar_comissoes_vendedores(data_inicio, data_fim):
             venda.vendedor_id,
             {
                 "vendedor_nome": venda.vendedor.nome,
+                "total_vendas": 0,
                 "total_comissao": Decimal("0.00"),
             },
         )
+        atual["total_vendas"] += 1
         atual["total_comissao"] += calcular_comissao_venda(venda)
         totais_por_vendedor[venda.vendedor_id] = atual
 
@@ -63,6 +66,7 @@ def listar_comissoes_vendedores(data_inicio, data_fim):
         ComissaoVendedor(
             vendedor_id=vendedor_id,
             vendedor_nome=dados["vendedor_nome"],
+            total_vendas=dados["total_vendas"],
             total_comissao=arredondar_valor_monetario(dados["total_comissao"]),
         )
         for vendedor_id, dados in totais_por_vendedor.items()

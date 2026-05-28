@@ -103,11 +103,12 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 CORS_ALLOWED_ORIGINS = env_config(
     "CORS_ALLOWED_ORIGINS",
-    default="http://localhost:5173",
+    default="http://localhost:5173,http://127.0.0.1:5173",
     cast=Csv(),
 )
 
 REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
         "rest_framework.renderers.BrowsableAPIRenderer",

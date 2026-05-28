@@ -168,8 +168,11 @@ class ServicoComissaoTests(TestCase):
         )
 
         totais = {item.vendedor_nome: item.total_comissao for item in relatorio}
+        total_vendas = {item.vendedor_nome: item.total_vendas for item in relatorio}
         self.assertEqual(totais["Vendedor Padrao"], Decimal("10.00"))
         self.assertEqual(totais["Outro Vendedor"], Decimal("2.00"))
+        self.assertEqual(total_vendas["Vendedor Padrao"], 1)
+        self.assertEqual(total_vendas["Outro Vendedor"], 1)
 
     def criar_item_venda(
         self,
@@ -239,6 +242,64 @@ class VendaApiTests(APITestCase):
         venda = Venda.objects.get(numero_nota_fiscal="NF-API-001")
         self.assertEqual(venda.itens.count(), 1)
         self.assertEqual(response.data["valor_total"], "50.00")
+        self.assertEqual(response.data["cliente_nome"], cliente.nome)
+        self.assertEqual(response.data["vendedor_nome"], vendedor.nome)
+        self.assertEqual(response.data["itens"][0]["produto_codigo"], produto.codigo)
+        self.assertEqual(
+            response.data["itens"][0]["produto_descricao"],
+            produto.descricao,
+        )
+
+    def test_item_venda_retorna_comissao_aplicada_pela_regra_do_dia(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Regra",
+            email="cliente.regra@example.com",
+            telefone="11999990000",
+        )
+        vendedor = Vendedor.objects.create(
+            nome="Vendedor Regra",
+            email="vendedor.regra@example.com",
+            telefone="11888880000",
+        )
+        produto = Produto.objects.create(
+            codigo="REG-001",
+            descricao="Produto com regra",
+            valor_unitario=Decimal("100.00"),
+            percentual_comissao=Decimal("10.00"),
+        )
+        RegraComissao.objects.create(
+            dia_semana=RegraComissao.DiaSemana.SEGUNDA,
+            percentual_minimo=Decimal("3.00"),
+            percentual_maximo=Decimal("8.00"),
+        )
+
+        response = self.client.post(
+            "/api/vendas/",
+            {
+                "numero_nota_fiscal": "NF-REG-001",
+                "data_hora": "2026-06-01T10:00:00-03:00",
+                "cliente": cliente.id,
+                "vendedor": vendedor.id,
+                "itens": [
+                    {
+                        "produto": produto.id,
+                        "quantidade": 1,
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            response.data["itens"][0]["percentual_comissao"],
+            "10.00",
+        )
+        self.assertEqual(
+            response.data["itens"][0]["percentual_comissao_aplicado"],
+            "8.00",
+        )
+        self.assertEqual(response.data["itens"][0]["valor_comissao"], "8.00")
 
     def test_nao_cria_venda_sem_itens(self):
         cliente = Cliente.objects.create(
@@ -317,6 +378,7 @@ class VendaApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["total_geral"], Decimal("10.00"))
         self.assertEqual(response.data["resultados"][0]["vendedor_nome"], vendedor.nome)
+        self.assertEqual(response.data["resultados"][0]["total_vendas"], 1)
         self.assertEqual(response.data["resultados"][0]["total_comissao"], "10.00")
 
     def test_lista_comissoes_exige_periodo(self):

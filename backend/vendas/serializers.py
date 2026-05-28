@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from .models import ItemVenda, RegraComissao, Venda
+from .services import calcular_comissao_item, obter_percentual_comissao_aplicado
 
 
 class RegraComissaoSerializer(serializers.ModelSerializer):
@@ -18,6 +19,10 @@ class RegraComissaoSerializer(serializers.ModelSerializer):
 
 
 class ItemVendaSerializer(serializers.ModelSerializer):
+    produto_codigo = serializers.CharField(source="produto.codigo", read_only=True)
+    produto_descricao = serializers.CharField(source="produto.descricao", read_only=True)
+    percentual_comissao_aplicado = serializers.SerializerMethodField()
+    valor_comissao = serializers.SerializerMethodField()
     valor_total = serializers.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -29,16 +34,40 @@ class ItemVendaSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "produto",
+            "produto_codigo",
+            "produto_descricao",
             "quantidade",
             "valor_unitario",
             "percentual_comissao",
+            "percentual_comissao_aplicado",
             "valor_total",
+            "valor_comissao",
         ]
-        read_only_fields = ["id", "valor_unitario", "percentual_comissao", "valor_total"]
+        read_only_fields = [
+            "id",
+            "valor_unitario",
+            "percentual_comissao",
+            "percentual_comissao_aplicado",
+            "valor_total",
+            "valor_comissao",
+        ]
+
+    def get_percentual_comissao_aplicado(self, obj):
+        percentual = obter_percentual_comissao_aplicado(
+            data_hora=obj.venda.data_hora,
+            percentual_produto=obj.percentual_comissao,
+        )
+
+        return f"{percentual:.2f}"
+
+    def get_valor_comissao(self, obj):
+        return f"{calcular_comissao_item(obj):.2f}"
 
 
 class VendaSerializer(serializers.ModelSerializer):
     itens = ItemVendaSerializer(many=True)
+    cliente_nome = serializers.CharField(source="cliente.nome", read_only=True)
+    vendedor_nome = serializers.CharField(source="vendedor.nome", read_only=True)
     valor_total = serializers.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -52,7 +81,9 @@ class VendaSerializer(serializers.ModelSerializer):
             "numero_nota_fiscal",
             "data_hora",
             "cliente",
+            "cliente_nome",
             "vendedor",
+            "vendedor_nome",
             "itens",
             "valor_total",
             "criado_em",
@@ -92,6 +123,7 @@ class VendaSerializer(serializers.ModelSerializer):
 class ComissaoVendedorSerializer(serializers.Serializer):
     vendedor_id = serializers.IntegerField()
     vendedor_nome = serializers.CharField()
+    total_vendas = serializers.IntegerField()
     total_comissao = serializers.DecimalField(max_digits=12, decimal_places=2)
 
 

@@ -1,13 +1,17 @@
-import { useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 
 import "./App.css"
+import { api } from "./api/cliente-http"
 import logoipsum from "./assets/logoipsum.svg"
 
 type PaginaAtual = "vendas" | "comissoes"
 
 type VendaTabela = {
+  id: number
   notaFiscal: string
+  clienteId: number
   cliente: string
+  vendedorId: number
   vendedor: string
   dataVenda: string
   valorTotal: string
@@ -15,6 +19,7 @@ type VendaTabela = {
 }
 
 type ItemVendaTabela = {
+  produtoId: number
   codigo: string
   descricao: string
   quantidade: number
@@ -25,44 +30,80 @@ type ItemVendaTabela = {
 }
 
 type ProdutoCatalogo = {
+  id: number
   codigo: string
   descricao: string
   precoUnitario: number
   percentualComissao: number
 }
 
-const produtosCatalogo: ProdutoCatalogo[] = [
-  {
-    codigo: "003",
-    descricao: "Caneta esferográfica - Preta",
-    precoUnitario: 1.5,
-    percentualComissao: 4,
-  },
-  {
-    codigo: "004",
-    descricao: "Caneta esferográfica - Azul",
-    precoUnitario: 1.5,
-    percentualComissao: 4,
-  },
-  {
-    codigo: "005",
-    descricao: "Mouse Logitech",
-    precoUnitario: 23.7,
-    percentualComissao: 10,
-  },
-  {
-    codigo: "012",
-    descricao: "Caderno 200 folhas",
-    precoUnitario: 15,
-    percentualComissao: 5,
-  },
-  {
-    codigo: "105",
-    descricao: "Manutenção Bicicleta",
-    precoUnitario: 17.4,
-    percentualComissao: 2,
-  },
-]
+type PessoaOpcao = {
+  id: number
+  nome: string
+}
+
+type ProdutoApi = {
+  id: number
+  codigo: string
+  descricao: string
+  valor_unitario: string
+  percentual_comissao: string
+}
+
+type PessoaApi = {
+  id: number
+  nome: string
+}
+
+type ItemVendaApi = {
+  id: number
+  produto: number
+  produto_codigo: string
+  produto_descricao: string
+  quantidade: number
+  valor_unitario: string
+  percentual_comissao: string
+  percentual_comissao_aplicado: string
+  valor_total: string
+  valor_comissao: string
+}
+
+type VendaApi = {
+  id: number
+  numero_nota_fiscal: string
+  data_hora: string
+  cliente: number
+  cliente_nome: string
+  vendedor: number
+  vendedor_nome: string
+  itens: ItemVendaApi[]
+  valor_total: string
+}
+
+type ItemVendaPayload = {
+  produto: number
+  quantidade: number
+}
+
+type VendaPayload = {
+  numero_nota_fiscal: string
+  data_hora: string
+  cliente: number
+  vendedor: number
+  itens: ItemVendaPayload[]
+}
+
+type LinhaComissaoApi = {
+  vendedor_id: number
+  vendedor_nome: string
+  total_vendas: number
+  total_comissao: string
+}
+
+type RelatorioComissoesApi = {
+  resultados: LinhaComissaoApi[]
+  total_geral: string | number
+}
 
 function formatarMoeda(valor: number) {
   return new Intl.NumberFormat("pt-BR", {
@@ -73,6 +114,10 @@ function formatarMoeda(valor: number) {
 
 function converterMoedaParaNumero(valor: string) {
   return Number(valor.replace("R$", "").replace(/\./g, "").replace(",", "."))
+}
+
+function converterDecimalApi(valor: string | number) {
+  return Number(valor)
 }
 
 function montarRotuloProduto(produto: ProdutoCatalogo) {
@@ -87,6 +132,7 @@ function criarItemVenda(
   const comissao = totalProduto * (produto.percentualComissao / 100)
 
   return {
+    produtoId: produto.id,
     codigo: produto.codigo,
     descricao: produto.descricao,
     quantidade,
@@ -95,10 +141,6 @@ function criarItemVenda(
     percentualComissao: `${produto.percentualComissao}%`,
     comissao: formatarMoeda(comissao),
   }
-}
-
-function extrairNome(opcaoSelecionada: string) {
-  return opcaoSelecionada.split(" - ").slice(1).join(" - ")
 }
 
 function gerarProximaNotaFiscal(vendas: VendaTabela[]) {
@@ -112,12 +154,104 @@ function gerarProximaNotaFiscal(vendas: VendaTabela[]) {
 
 function criarVendaVazia(notaFiscal: string): VendaTabela {
   return {
+    id: 0,
     notaFiscal,
+    clienteId: 0,
     cliente: "",
+    vendedorId: 0,
     vendedor: "",
-    dataVenda: "19/10/2022 - 14:25",
+    dataVenda: formatarDataHoraFormulario(new Date()),
     valorTotal: formatarMoeda(0),
     itens: [],
+  }
+}
+
+function formatarDataHoraFormulario(valor: Date) {
+  const data = new Intl.DateTimeFormat("pt-BR").format(valor)
+  const hora = valor.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+
+  return `${data} - ${hora}`
+}
+
+function formatarDataHoraApi(valor: string) {
+  const data = new Date(valor)
+
+  if (Number.isNaN(data.getTime())) {
+    return valor
+  }
+
+  return formatarDataHoraFormulario(data)
+}
+
+function converterDataHoraParaApi(valor: string) {
+  const [data, hora] = valor.split(" - ")
+  const [dia, mes, ano] = data.split("/")
+
+  return `${ano}-${mes}-${dia}T${hora}:00-03:00`
+}
+
+function converterDataParaApi(valor: string) {
+  const [dia, mes, ano] = valor.split("/")
+
+  return `${ano}-${mes}-${dia}`
+}
+
+function formatarPercentual(valor: string) {
+  return `${converterDecimalApi(valor).toLocaleString("pt-BR", {
+    maximumFractionDigits: 2,
+  })}%`
+}
+
+function mapearProdutoApi(produto: ProdutoApi): ProdutoCatalogo {
+  return {
+    id: produto.id,
+    codigo: produto.codigo,
+    descricao: produto.descricao,
+    precoUnitario: converterDecimalApi(produto.valor_unitario),
+    percentualComissao: converterDecimalApi(produto.percentual_comissao),
+  }
+}
+
+function mapearVendaApi(venda: VendaApi): VendaTabela {
+  return {
+    id: venda.id,
+    notaFiscal: venda.numero_nota_fiscal,
+    clienteId: venda.cliente,
+    cliente: venda.cliente_nome,
+    vendedorId: venda.vendedor,
+    vendedor: venda.vendedor_nome,
+    dataVenda: formatarDataHoraApi(venda.data_hora),
+    valorTotal: formatarMoeda(converterDecimalApi(venda.valor_total)),
+    itens: venda.itens.map((item) => {
+      return {
+        produtoId: item.produto,
+        codigo: item.produto_codigo,
+        descricao: item.produto_descricao,
+        quantidade: item.quantidade,
+        precoUnitario: formatarMoeda(converterDecimalApi(item.valor_unitario)),
+        totalProduto: formatarMoeda(converterDecimalApi(item.valor_total)),
+        percentualComissao: formatarPercentual(
+          item.percentual_comissao_aplicado,
+        ),
+        comissao: formatarMoeda(converterDecimalApi(item.valor_comissao)),
+      }
+    }),
+  }
+}
+
+function montarPayloadVenda(venda: VendaTabela): VendaPayload {
+  return {
+    numero_nota_fiscal: venda.notaFiscal,
+    data_hora: converterDataHoraParaApi(venda.dataVenda),
+    cliente: venda.clienteId,
+    vendedor: venda.vendedorId,
+    itens: venda.itens.map((item) => ({
+      produto: item.produtoId,
+      quantidade: item.quantidade,
+    })),
   }
 }
 
@@ -149,165 +283,6 @@ function gerarDiasCalendario(mesAtual: Date) {
     }
   })
 }
-
-const vendasExemplo: VendaTabela[] = [
-  {
-    notaFiscal: "00001005",
-    cliente: "Jorge Lacerda dos Santos",
-    vendedor: "Regina Souza",
-    dataVenda: "19/10/2022 - 14:25",
-    valorTotal: "R$ 71,10",
-    itens: [
-      {
-        codigo: "005",
-        descricao: "Mouse Logitech",
-        quantidade: 1,
-        precoUnitario: "R$ 23,70",
-        totalProduto: "R$ 23,70",
-        percentualComissao: "10%",
-        comissao: "R$ 2,37",
-      },
-      {
-        codigo: "012",
-        descricao: "Caderno 200 folhas",
-        quantidade: 2,
-        precoUnitario: "R$ 15,00",
-        totalProduto: "R$ 30,00",
-        percentualComissao: "5%",
-        comissao: "R$ 1,50",
-      },
-      {
-        codigo: "105",
-        descricao: "Manutenção Bicicleta",
-        quantidade: 1,
-        precoUnitario: "R$ 17,40",
-        totalProduto: "R$ 17,40",
-        percentualComissao: "2%",
-        comissao: "R$ 0,35",
-      },
-    ],
-  },
-  {
-    notaFiscal: "00001004",
-    cliente: "Francisco Severino Ferreira",
-    vendedor: "Cléber Toledo",
-    dataVenda: "19/10/2022 - 14:20",
-    valorTotal: "R$ 65,99",
-    itens: [],
-  },
-  {
-    notaFiscal: "00001003",
-    cliente: "Vanessa Elza Liz Freitas",
-    vendedor: "Jacira dos Santos",
-    dataVenda: "19/10/2022 - 13:05",
-    valorTotal: "R$ 85,12",
-    itens: [],
-  },
-  {
-    notaFiscal: "00001002",
-    cliente: "Rebeca Beatriz Moreira",
-    vendedor: "Cléber Toledo",
-    dataVenda: "19/10/2022 - 12:10",
-    valorTotal: "R$ 102,53",
-    itens: [],
-  },
-  {
-    notaFiscal: "00001001",
-    cliente: "Gustavo Pietro da Luz",
-    vendedor: "Cléber Toledo",
-    dataVenda: "19/10/2022 - 11:13",
-    valorTotal: "R$ 253,75",
-    itens: [],
-  },
-  {
-    notaFiscal: "00001000",
-    cliente: "Agatha Manuela Viana",
-    vendedor: "Jacira dos Santos",
-    dataVenda: "19/10/2022 - 09:45",
-    valorTotal: "R$ 22,36",
-    itens: [],
-  },
-  {
-    notaFiscal: "00000999",
-    cliente: "Fabiana Stefany Luana Gomes",
-    vendedor: "Regina Souza",
-    dataVenda: "18/10/2022 - 14:25",
-    valorTotal: "R$ 48,45",
-    itens: [],
-  },
-  {
-    notaFiscal: "00000998",
-    cliente: "Rosa Ester Carvalho",
-    vendedor: "Regina Souza",
-    dataVenda: "18/10/2022 - 12:10",
-    valorTotal: "R$ 75,78",
-    itens: [],
-  },
-  {
-    notaFiscal: "00000997",
-    cliente: "Marcos Fábio Alexandre da Cruz",
-    vendedor: "Jacira dos Santos",
-    dataVenda: "18/10/2022 - 09:45",
-    valorTotal: "R$ 36,52",
-    itens: [],
-  },
-  {
-    notaFiscal: "00000996",
-    cliente: "Aparecida Helena Tatiane da Paz",
-    vendedor: "Regina Souza",
-    dataVenda: "17/10/2022 - 11:25",
-    valorTotal: "R$ 78,56",
-    itens: [],
-  },
-  {
-    notaFiscal: "00000995",
-    cliente: "Bianca Rafaela Martins",
-    vendedor: "Jacira dos Santos",
-    dataVenda: "17/10/2022 - 10:40",
-    valorTotal: "R$ 94,20",
-    itens: [],
-  },
-  {
-    notaFiscal: "00000994",
-    cliente: "Henrique Augusto Ribeiro",
-    vendedor: "Cléber Toledo",
-    dataVenda: "17/10/2022 - 09:30",
-    valorTotal: "R$ 31,75",
-    itens: [],
-  },
-  {
-    notaFiscal: "00000993",
-    cliente: "Larissa Vitória Nogueira",
-    vendedor: "Regina Souza",
-    dataVenda: "16/10/2022 - 16:15",
-    valorTotal: "R$ 119,80",
-    itens: [],
-  },
-  {
-    notaFiscal: "00000992",
-    cliente: "Eduardo Caio Almeida",
-    vendedor: "Jacira dos Santos",
-    dataVenda: "16/10/2022 - 14:05",
-    valorTotal: "R$ 42,10",
-    itens: [],
-  },
-  {
-    notaFiscal: "00000991",
-    cliente: "Milena Cristina Duarte",
-    vendedor: "Cléber Toledo",
-    dataVenda: "16/10/2022 - 11:50",
-    valorTotal: "R$ 68,35",
-    itens: [],
-  },
-  {
-    notaFiscal: "00000990",
-    cliente: "Otávio Samuel Ferreira",
-    vendedor: "Regina Souza",
-    dataVenda: "15/10/2022 - 15:45",
-    valorTotal: "R$ 157,90",
-    itens: [],
-  },
-]
 
 function App() {
   const [paginaAtual, setPaginaAtual] = useState<PaginaAtual>("vendas")
@@ -378,7 +353,6 @@ function App() {
 
         {paginaAtual === "vendas" ? (
           <PaginaVendas
-            vendas={vendasExemplo}
             cadastrandoVenda={cadastrandoVenda}
             vendaEmEdicao={vendaEmEdicao}
             onCadastrarVenda={() => setCadastrandoVenda(true)}
@@ -395,7 +369,6 @@ function App() {
 }
 
 function PaginaVendas({
-  vendas,
   cadastrandoVenda,
   vendaEmEdicao,
   onCadastrarVenda,
@@ -403,7 +376,6 @@ function PaginaVendas({
   onFecharCadastro,
   onFecharEdicao,
 }: {
-  vendas: VendaTabela[]
   cadastrandoVenda: boolean
   vendaEmEdicao: VendaTabela | null
   onCadastrarVenda: () => void
@@ -411,7 +383,12 @@ function PaginaVendas({
   onFecharCadastro: () => void
   onFecharEdicao: () => void
 }) {
-  const [listaVendas, setListaVendas] = useState(vendas)
+  const [listaVendas, setListaVendas] = useState<VendaTabela[]>([])
+  const [produtos, setProdutos] = useState<ProdutoCatalogo[]>([])
+  const [clientes, setClientes] = useState<PessoaOpcao[]>([])
+  const [vendedores, setVendedores] = useState<PessoaOpcao[]>([])
+  const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState("")
   const [notaFiscalAberta, setNotaFiscalAberta] = useState<string | null>(null)
   const [vendaParaRemover, setVendaParaRemover] = useState<VendaTabela | null>(
     null,
@@ -420,44 +397,101 @@ function PaginaVendas({
   const [mostrarAlertaAlteracao, setMostrarAlertaAlteracao] = useState(false)
   const [mostrarAlertaCadastro, setMostrarAlertaCadastro] = useState(false)
 
+  useEffect(() => {
+    async function carregarDados() {
+      try {
+        setCarregando(true)
+        setErro("")
+        const [vendasApi, produtosApi, clientesApi, vendedoresApi] =
+          await Promise.all([
+            api.get<VendaApi[]>("/vendas/"),
+            api.get<ProdutoApi[]>("/produtos/"),
+            api.get<PessoaApi[]>("/clientes/"),
+            api.get<PessoaApi[]>("/vendedores/"),
+          ])
+
+        setListaVendas(vendasApi.map(mapearVendaApi))
+        setProdutos(produtosApi.map(mapearProdutoApi))
+        setClientes(clientesApi.map(({ id, nome }) => ({ id, nome })))
+        setVendedores(vendedoresApi.map(({ id, nome }) => ({ id, nome })))
+      } catch (erro) {
+        setErro(
+          erro instanceof Error
+            ? erro.message
+            : "Não foi possível carregar os dados da API.",
+        )
+      } finally {
+        setCarregando(false)
+      }
+    }
+
+    carregarDados()
+  }, [])
+
   function alternarItens(notaFiscal: string) {
     setNotaFiscalAberta((notaAtual) =>
       notaAtual === notaFiscal ? null : notaFiscal,
     )
   }
 
-  function confirmarRemocao() {
+  async function confirmarRemocao() {
     if (!vendaParaRemover) {
       return
     }
 
-    setListaVendas((vendasAtuais) =>
-      vendasAtuais.filter(
-        (venda) => venda.notaFiscal !== vendaParaRemover.notaFiscal,
-      ),
-    )
-    setVendaParaRemover(null)
-    setMostrarAlertaRemocao(true)
+    try {
+      setErro("")
+      await api.delete("/vendas/" + vendaParaRemover.id + "/")
+      setListaVendas((vendasAtuais) =>
+        vendasAtuais.filter((venda) => venda.id !== vendaParaRemover.id),
+      )
+      setVendaParaRemover(null)
+      setMostrarAlertaRemocao(true)
+    } catch {
+      setErro("Não foi possível remover a venda.")
+    }
   }
 
-  function finalizarEdicao(vendaAtualizada: VendaTabela) {
-    setListaVendas((vendasAtuais) =>
-      vendasAtuais.map((venda) =>
-        venda.notaFiscal === vendaAtualizada.notaFiscal
-          ? vendaAtualizada
-          : venda,
-      ),
-    )
-    setNotaFiscalAberta(null)
-    setMostrarAlertaAlteracao(true)
-    onFecharEdicao()
+  async function finalizarEdicao(vendaAtualizada: VendaTabela) {
+    try {
+      setErro("")
+      const vendaApi = await api.put<VendaApi>(
+        "/vendas/" + vendaAtualizada.id + "/",
+        montarPayloadVenda(vendaAtualizada),
+      )
+      const vendaMapeada = mapearVendaApi(vendaApi)
+
+      setListaVendas((vendasAtuais) =>
+        vendasAtuais.map((venda) =>
+          venda.id === vendaMapeada.id ? vendaMapeada : venda,
+        ),
+      )
+      setNotaFiscalAberta(null)
+      setMostrarAlertaAlteracao(true)
+      onFecharEdicao()
+    } catch (erro) {
+      setErro("Não foi possível alterar a venda.")
+      throw erro
+    }
   }
 
-  function finalizarCadastro(novaVenda: VendaTabela) {
-    setListaVendas((vendasAtuais) => [novaVenda, ...vendasAtuais])
-    setNotaFiscalAberta(null)
-    setMostrarAlertaCadastro(true)
-    onFecharCadastro()
+  async function finalizarCadastro(novaVenda: VendaTabela) {
+    try {
+      setErro("")
+      const vendaApi = await api.post<VendaApi>(
+        "/vendas/",
+        montarPayloadVenda(novaVenda),
+      )
+      const vendaMapeada = mapearVendaApi(vendaApi)
+
+      setListaVendas((vendasAtuais) => [vendaMapeada, ...vendasAtuais])
+      setNotaFiscalAberta(null)
+      setMostrarAlertaCadastro(true)
+      onFecharCadastro()
+    } catch (erro) {
+      setErro("Não foi possível cadastrar a venda.")
+      throw erro
+    }
   }
 
   if (cadastrandoVenda) {
@@ -465,6 +499,9 @@ function PaginaVendas({
       <TelaFormularioVenda
         modo="criar"
         venda={criarVendaVazia(gerarProximaNotaFiscal(listaVendas))}
+        produtos={produtos}
+        clientes={clientes}
+        vendedores={vendedores}
         onCancelar={onFecharCadastro}
         onFinalizar={finalizarCadastro}
       />
@@ -476,6 +513,9 @@ function PaginaVendas({
       <TelaFormularioVenda
         modo="editar"
         venda={vendaEmEdicao}
+        produtos={produtos}
+        clientes={clientes}
+        vendedores={vendedores}
         onCancelar={onFecharEdicao}
         onFinalizar={finalizarEdicao}
       />
@@ -496,57 +536,59 @@ function PaginaVendas({
           </button>
         </div>
 
-        <div className="tabela-scroll">
-          <table className="tabela-vendas">
-            <thead>
-              <tr>
-                <th>Nota Fiscal</th>
-                <th>Cliente</th>
-                <th>Vendedor</th>
-                <th>Data da Venda</th>
-                <th>Valor Total</th>
-                <th>Opções</th>
-              </tr>
-            </thead>
-            <tbody>
-              {listaVendas.map((venda) => {
-                const estaAberta = notaFiscalAberta === venda.notaFiscal
+        {erro && <p className="estado-vazio">{erro}</p>}
+        {carregando && <p className="estado-vazio">Carregando vendas...</p>}
 
-                return (
-                  <>
-                    <tr key={venda.notaFiscal}>
-                      <td>{venda.notaFiscal}</td>
-                      <td>{venda.cliente}</td>
-                      <td>{venda.vendedor}</td>
-                      <td>{venda.dataVenda}</td>
-                      <td>{venda.valorTotal}</td>
-                      <td>
-                        <AcoesVenda
-                          estaAberta={estaAberta}
-                          onAlternarItens={() =>
-                            alternarItens(venda.notaFiscal)
-                          }
-                          onRemover={() => setVendaParaRemover(venda)}
-                          onEditar={() => onEditarVenda(venda)}
-                        />
-                      </td>
-                    </tr>
-                    {estaAberta && (
-                      <tr
-                        className="linha-detalhes"
-                        key={`${venda.notaFiscal}-itens`}
-                      >
-                        <td colSpan={6}>
-                          <TabelaItensVenda venda={venda} />
+        {!carregando && !erro && (
+          <div className="tabela-scroll">
+            <table className="tabela-vendas">
+              <thead>
+                <tr>
+                  <th>Nota Fiscal</th>
+                  <th>Cliente</th>
+                  <th>Vendedor</th>
+                  <th>Data da Venda</th>
+                  <th>Valor Total</th>
+                  <th>Opções</th>
+                </tr>
+              </thead>
+              <tbody>
+                {listaVendas.map((venda) => {
+                  const estaAberta = notaFiscalAberta === venda.notaFiscal
+
+                  return (
+                    <Fragment key={venda.id}>
+                      <tr>
+                        <td>{venda.notaFiscal}</td>
+                        <td>{venda.cliente}</td>
+                        <td>{venda.vendedor}</td>
+                        <td>{venda.dataVenda}</td>
+                        <td>{venda.valorTotal}</td>
+                        <td>
+                          <AcoesVenda
+                            estaAberta={estaAberta}
+                            onAlternarItens={() =>
+                              alternarItens(venda.notaFiscal)
+                            }
+                            onRemover={() => setVendaParaRemover(venda)}
+                            onEditar={() => onEditarVenda(venda)}
+                          />
                         </td>
                       </tr>
-                    )}
-                  </>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+                      {estaAberta && (
+                        <tr className="linha-detalhes">
+                          <td colSpan={6}>
+                            <TabelaItensVenda venda={venda} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {vendaParaRemover && (
@@ -681,6 +723,10 @@ function TabelaItensVenda({ venda }: { venda: VendaTabela }) {
     (total, item) => total + item.quantidade,
     0,
   )
+  const comissaoTotal = venda.itens.reduce(
+    (total, item) => total + converterMoedaParaNumero(item.comissao),
+    0,
+  )
 
   return (
     <table className="tabela-itens-venda">
@@ -723,7 +769,7 @@ function TabelaItensVenda({ venda }: { venda: VendaTabela }) {
           <td />
           <td>{venda.valorTotal}</td>
           <td />
-          <td>R$ 4,22</td>
+          <td>{formatarMoeda(comissaoTotal)}</td>
         </tr>
       </tfoot>
     </table>
@@ -733,53 +779,41 @@ function TabelaItensVenda({ venda }: { venda: VendaTabela }) {
 function TelaFormularioVenda({
   modo,
   venda,
+  produtos,
+  clientes,
+  vendedores,
   onCancelar,
   onFinalizar,
 }: {
   modo: "editar" | "criar"
   venda: VendaTabela
+  produtos: ProdutoCatalogo[]
+  clientes: PessoaOpcao[]
+  vendedores: PessoaOpcao[]
   onCancelar: () => void
-  onFinalizar: (vendaAtualizada: VendaTabela) => void
+  onFinalizar: (vendaAtualizada: VendaTabela) => void | Promise<void>
 }) {
-  const opcoesVendedores = [
-    "001 - Regina Souza",
-    "002 - Cléber Toledo",
-    "003 - Jacira dos Santos",
-  ]
-  const opcoesClientes = [
-    "025 - Jorge Lacerda dos Santos",
-    "026 - Francisco Severino Ferreira",
-    "027 - Vanessa Elza Liz Freitas",
-  ]
   const [buscaProduto, setBuscaProduto] = useState("")
   const [quantidadeProduto, setQuantidadeProduto] = useState("0")
   const [produtoSelecionado, setProdutoSelecionado] =
     useState<ProdutoCatalogo | null>(null)
   const [dataVenda, setDataVenda] = useState(venda.dataVenda)
   const [vendedorSelecionado, setVendedorSelecionado] = useState(() =>
-    modo === "criar"
-      ? ""
-      : opcoesVendedores.find(
-          (opcao) => extrairNome(opcao) === venda.vendedor,
-        ) ?? opcoesVendedores[0],
+    venda.vendedorId > 0 ? String(venda.vendedorId) : "",
   )
   const [clienteSelecionado, setClienteSelecionado] = useState(() =>
-    modo === "criar"
-      ? ""
-      : opcoesClientes.find((opcao) => extrairNome(opcao) === venda.cliente) ??
-        opcoesClientes[0],
+    venda.clienteId > 0 ? String(venda.clienteId) : "",
   )
-  const [itensEditaveis, setItensEditaveis] = useState(() =>
-    modo === "criar"
-      ? venda.itens
-      : venda.itens.filter((item) => item.codigo !== "005"),
-  )
+  const [itensEditaveis, setItensEditaveis] = useState(venda.itens)
+  const [salvando, setSalvando] = useState(false)
   const textoBuscaNormalizado = buscaProduto.trim().toLowerCase()
-  const sugestoesFiltradas = produtosCatalogo.filter((produto) =>
+  const sugestoesFiltradas = produtos.filter((produto) =>
     montarRotuloProduto(produto).toLowerCase().includes(textoBuscaNormalizado),
   )
-  const exibirSugestoes = buscaProduto.trim().length > 0
-    && !produtoSelecionado
+  const exibirSugestoes =
+    buscaProduto.trim().length > 0 &&
+    !produtoSelecionado &&
+    sugestoesFiltradas.length > 0
   const valorTotalEdicao = formatarMoeda(
     itensEditaveis.reduce(
       (total, item) => total + converterMoedaParaNumero(item.totalProduto),
@@ -796,7 +830,7 @@ function TelaFormularioVenda({
     const quantidade = Number(quantidadeProduto)
     const produto =
       produtoSelecionado ??
-      produtosCatalogo.find(
+      produtos.find(
         (item) =>
           montarRotuloProduto(item).toLowerCase() === textoBuscaNormalizado ||
           item.codigo === textoBuscaNormalizado,
@@ -809,7 +843,7 @@ function TelaFormularioVenda({
 
     setItensEditaveis((itensAtuais) => {
       const itemExistente = itensAtuais.find(
-        (item) => item.codigo === produto.codigo,
+        (item) => item.produtoId === produto.id,
       )
 
       if (!itemExistente) {
@@ -817,7 +851,7 @@ function TelaFormularioVenda({
       }
 
       return itensAtuais.map((item) =>
-        item.codigo === produto.codigo
+        item.produtoId === produto.id
           ? criarItemVenda(produto, item.quantidade + quantidade)
           : item,
       )
@@ -827,25 +861,39 @@ function TelaFormularioVenda({
     setQuantidadeProduto("0")
   }
 
-  function removerProduto(codigo: string) {
+  function removerProduto(produtoId: number) {
     setItensEditaveis((itensAtuais) =>
-      itensAtuais.filter((item) => item.codigo !== codigo),
+      itensAtuais.filter((item) => item.produtoId !== produtoId),
     )
   }
 
-  function finalizarVenda() {
-    if (!formularioValido) {
+  async function finalizarVenda() {
+    const cliente = clientes.find(
+      (opcao) => opcao.id === Number(clienteSelecionado),
+    )
+    const vendedor = vendedores.find(
+      (opcao) => opcao.id === Number(vendedorSelecionado),
+    )
+
+    if (!formularioValido || !cliente || !vendedor || salvando) {
       return
     }
 
-    onFinalizar({
-      ...venda,
-      cliente: extrairNome(clienteSelecionado),
-      vendedor: extrairNome(vendedorSelecionado),
-      dataVenda,
-      itens: itensEditaveis,
-      valorTotal: valorTotalEdicao,
-    })
+    try {
+      setSalvando(true)
+      await onFinalizar({
+        ...venda,
+        clienteId: cliente.id,
+        cliente: cliente.nome,
+        vendedorId: vendedor.id,
+        vendedor: vendedor.nome,
+        dataVenda,
+        itens: itensEditaveis,
+        valorTotal: valorTotalEdicao,
+      })
+    } catch {
+      setSalvando(false)
+    }
   }
 
   return (
@@ -868,7 +916,7 @@ function TelaFormularioVenda({
             {exibirSugestoes && (
               <ul className="sugestoes-produtos">
                 {sugestoesFiltradas.map((produto) => (
-                  <li key={produto.codigo}>
+                  <li key={produto.id}>
                     <button
                       type="button"
                       onClick={() => {
@@ -915,7 +963,7 @@ function TelaFormularioVenda({
           </thead>
           <tbody>
             {itensEditaveis.map((item) => (
-              <tr key={item.codigo}>
+              <tr key={item.produtoId}>
                 <td>
                   {item.codigo} - {item.descricao}
                 </td>
@@ -926,7 +974,7 @@ function TelaFormularioVenda({
                   <button
                     type="button"
                     aria-label="Remover produto"
-                    onClick={() => removerProduto(item.codigo)}
+                    onClick={() => removerProduto(item.produtoId)}
                   >
                     <IconeExcluir />
                   </button>
@@ -959,8 +1007,10 @@ function TelaFormularioVenda({
               <option value="" disabled>
                 Selecione o nome
               </option>
-              {opcoesVendedores.map((opcao) => (
-                <option key={opcao}>{opcao}</option>
+              {vendedores.map((opcao) => (
+                <option key={opcao.id} value={opcao.id}>
+                  {String(opcao.id).padStart(3, "0")} - {opcao.nome}
+                </option>
               ))}
             </select>
           </label>
@@ -974,8 +1024,10 @@ function TelaFormularioVenda({
               <option value="" disabled>
                 Selecione o nome
               </option>
-              {opcoesClientes.map((opcao) => (
-                <option key={opcao}>{opcao}</option>
+              {clientes.map((opcao) => (
+                <option key={opcao.id} value={opcao.id}>
+                  {String(opcao.id).padStart(3, "0")} - {opcao.nome}
+                </option>
               ))}
             </select>
           </label>
@@ -998,9 +1050,9 @@ function TelaFormularioVenda({
             <button
               type="button"
               onClick={finalizarVenda}
-              disabled={!formularioValido}
+              disabled={!formularioValido || salvando}
             >
-              Finalizar
+              {salvando ? "Salvando..." : "Finalizar"}
             </button>
           </div>
         </div>
@@ -1015,35 +1067,19 @@ function PaginaComissoes() {
   const [campoCalendarioAberto, setCampoCalendarioAberto] = useState<
     "inicio" | "fim" | null
   >(null)
-  const [mesCalendario, setMesCalendario] = useState(
-    () => {
-      const hoje = new Date()
+  const [mesCalendario, setMesCalendario] = useState(() => {
+    const hoje = new Date()
 
-      return new Date(hoje.getFullYear(), hoje.getMonth(), 1)
-    },
-  )
+    return new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+  })
   const [relatorioVisivel, setRelatorioVisivel] = useState(false)
+  const [relatorioComissoes, setRelatorioComissoes] = useState<
+    LinhaComissaoApi[]
+  >([])
+  const [totalGeralComissoes, setTotalGeralComissoes] = useState("0.00")
+  const [carregandoRelatorio, setCarregandoRelatorio] = useState(false)
+  const [erroRelatorio, setErroRelatorio] = useState("")
   const diasCalendario = gerarDiasCalendario(mesCalendario)
-  const relatorioComissoes = [
-    {
-      codigo: "001",
-      vendedor: "Regina Souza",
-      totalVendas: 25,
-      totalComissoes: "R$ 1.245,25",
-    },
-    {
-      codigo: "002",
-      vendedor: "Cléber Toledo",
-      totalVendas: 23,
-      totalComissoes: "R$ 1.025,32",
-    },
-    {
-      codigo: "003",
-      vendedor: "Jacira dos Santos",
-      totalVendas: 31,
-      totalComissoes: "R$ 1.852,25",
-    },
-  ]
 
   function navegarMes(direcao: -1 | 1) {
     setMesCalendario(
@@ -1066,12 +1102,30 @@ function PaginaComissoes() {
     setCampoCalendarioAberto(null)
   }
 
-  function pesquisarComissoes() {
+  async function pesquisarComissoes() {
     if (!periodoInicio || !periodoFim) {
       return
     }
 
-    setRelatorioVisivel(true)
+    try {
+      setCarregandoRelatorio(true)
+      setErroRelatorio("")
+      const caminho =
+        "/comissoes/?data_inicio=" +
+        converterDataParaApi(periodoInicio) +
+        "&data_fim=" +
+        converterDataParaApi(periodoFim)
+      const relatorio = await api.get<RelatorioComissoesApi>(caminho)
+
+      setRelatorioComissoes(relatorio.resultados)
+      setTotalGeralComissoes(String(relatorio.total_geral))
+      setRelatorioVisivel(true)
+    } catch {
+      setErroRelatorio("Não foi possível carregar o relatório de comissões.")
+      setRelatorioVisivel(false)
+    } finally {
+      setCarregandoRelatorio(false)
+    }
   }
 
   return (
@@ -1178,7 +1232,13 @@ function PaginaComissoes() {
         </div>
       )}
 
-      {relatorioVisivel ? (
+      {carregandoRelatorio && (
+        <p className="estado-vazio">Carregando relatório...</p>
+      )}
+
+      {erroRelatorio && <p className="estado-vazio">{erroRelatorio}</p>}
+
+      {relatorioVisivel && !carregandoRelatorio ? (
         <div className="tabela-comissoes-scroll">
           <table className="tabela-comissoes">
             <thead>
@@ -1191,26 +1251,31 @@ function PaginaComissoes() {
             </thead>
             <tbody>
               {relatorioComissoes.map((linha) => (
-                <tr key={linha.codigo}>
-                  <td>{linha.codigo}</td>
-                  <td>{linha.vendedor}</td>
-                  <td>{linha.totalVendas}</td>
-                  <td>{linha.totalComissoes}</td>
+                <tr key={linha.vendedor_id}>
+                  <td>{String(linha.vendedor_id).padStart(3, "0")}</td>
+                  <td>{linha.vendedor_nome}</td>
+                  <td>{linha.total_vendas}</td>
+                  <td>{formatarMoeda(converterDecimalApi(linha.total_comissao))}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr>
                 <td colSpan={3}>Total de Comissões do Período</td>
-                <td>R$ 4.122,82</td>
+                <td>
+                  {formatarMoeda(converterDecimalApi(totalGeralComissoes))}
+                </td>
               </tr>
             </tfoot>
           </table>
         </div>
       ) : (
-        <p className="estado-vazio">
-          Para visualizar o relatório, selecione um período nos campos acima.
-        </p>
+        !carregandoRelatorio &&
+        !erroRelatorio && (
+          <p className="estado-vazio">
+            Para visualizar o relatório, selecione um período nos campos acima.
+          </p>
+        )
       )}
     </section>
   )
