@@ -1,3 +1,5 @@
+from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
+from rest_framework import serializers
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
@@ -26,6 +28,29 @@ class VendaViewSet(ModelViewSet):
     serializer_class = VendaSerializer
 
 
+@extend_schema(
+    parameters=[
+        OpenApiParameter(
+            name="data_inicio",
+            description="Data inicial do periodo no formato YYYY-MM-DD.",
+            required=True,
+            type=str,
+        ),
+        OpenApiParameter(
+            name="data_fim",
+            description="Data final do periodo no formato YYYY-MM-DD.",
+            required=True,
+            type=str,
+        ),
+    ],
+    responses=inline_serializer(
+        name="RelatorioComissoesResponse",
+        fields={
+            "resultados": ComissaoVendedorSerializer(many=True),
+            "total_geral": serializers.DecimalField(max_digits=12, decimal_places=2),
+        },
+    ),
+)
 @api_view(["GET"])
 def listar_comissoes(request):
     filtros = FiltroComissaoSerializer(data=request.query_params)

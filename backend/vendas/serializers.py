@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from .models import ItemVenda, RegraComissao, Venda
@@ -52,6 +53,7 @@ class ItemVendaSerializer(serializers.ModelSerializer):
             "valor_comissao",
         ]
 
+    @extend_schema_field(serializers.DecimalField(max_digits=5, decimal_places=2))
     def get_percentual_comissao_aplicado(self, obj):
         percentual = obter_percentual_comissao_aplicado(
             data_hora=obj.venda.data_hora,
@@ -60,6 +62,7 @@ class ItemVendaSerializer(serializers.ModelSerializer):
 
         return f"{percentual:.2f}"
 
+    @extend_schema_field(serializers.DecimalField(max_digits=12, decimal_places=2))
     def get_valor_comissao(self, obj):
         return f"{calcular_comissao_item(obj):.2f}"
 

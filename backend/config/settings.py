@@ -44,6 +44,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -102,11 +103,45 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
 CORS_ALLOWED_ORIGINS = env_config(
     "CORS_ALLOWED_ORIGINS",
     default="http://localhost:5173,http://127.0.0.1:5173",
     cast=Csv(),
 )
+
+CSRF_TRUSTED_ORIGINS = env_config(
+    "CSRF_TRUSTED_ORIGINS",
+    default="",
+    cast=Csv(),
+)
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = env_config(
+    "SECURE_SSL_REDIRECT",
+    default=not DEBUG,
+    cast=bool,
+)
+SECURE_HSTS_SECONDS = env_config(
+    "SECURE_HSTS_SECONDS",
+    default=31536000 if not DEBUG else 0,
+    cast=int,
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_config(
+    "SECURE_HSTS_INCLUDE_SUBDOMAINS",
+    default=not DEBUG,
+    cast=bool,
+)
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [],
